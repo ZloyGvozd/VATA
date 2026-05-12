@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>VATA - minecraft deauthenticator</title>
+    <link href="./output.css" rel="stylesheet">
+</head>
+<body class="bg-neutral-900 h-screen flex flex-col justify-start items-center gap-3 p-4">
+    <h1 class="text-red-500 font-bold text-7xl select-none">VATA</h1>
+    <input class="input-primary" placeholder="address:port">
+    <hr class="h-px bg-neutral-700 border-0 w-full">
+    <input class="input-primary" placeholder="spy nickname">
+    <textarea class="input-primary resize-none overflow-hidden" style="min-height: 60px;" placeholder="allowed players (comma separated)" oninput="this.style.height = 'auto'; this.style.height = (this.scrollHeight + 4) + 'px';"></textarea>
+    <hr class="h-px bg-neutral-700 border-0 w-full">
+    <div class="w-full h-full flex flex-col justify-start items-center gap-3 overflow-y-auto">
+        <div class="flex justify-center items-center gap-4">
+            <p class="text-neutral-300 font-mono select-none">try cmd (or just write chat)</p>
+            <button class="bg-red-500 text-neutral-50 w-8 h-8 rounded-lg grid place-items-center text-2xl active:scale-90 transition-all"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6 hover:size-7 transition-all"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg></button>
+        </div>
+
+        <div class="w-full bg-neutral-950 rounded-2xl p-4 flex flex-col justify-between items-center gap-4">
+            <div class="w-full flex justify-center items-center gap-4">
+                <select class="input-primary w-min h-full">
+                    <option value="type">Type chat</option>
+                    <option value="type">Drop items</option>
+                </select>
+                <input class="input-primary" placeholder='nicks, or empty to all'>
+            </div>
+            <input class="input-primary" placeholder='parameters'>
+        </div>
+        <div class="w-full bg-neutral-950 rounded-2xl p-4 flex flex-col justify-between items-center gap-4">
+            <div class="w-full flex justify-center items-center gap-4">
+                <select class="input-primary w-min h-full">
+                    <option value="type">Type chat</option>
+                    <option value="type">Drop items</option>
+                </select>
+                <input class="input-primary" placeholder='nicks, or empty to all'>
+            </div>
+            <input class="input-primary" placeholder='parameters'>
+        </div>
+    </div>
+    <button class="mt-auto w-full bg-red-500 rounded-xl font-mono text-neutral-50 text-2xl p-4 shadow-[10px_10px_11px_-10px_rgba(0,_0,_0,_0.1)] focus:outline-none focus:shadow-[10px_10px_11px_0px_rgba(0,_0,_0,_0.1)] hover:shadow-[10px_10px_11px_0px_rgba(0,_0,_0,_0.1)] active:scale-90 transition-all">
+        START
+    </button>
+</body>
+</html>
