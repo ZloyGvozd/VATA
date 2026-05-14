@@ -1,12 +1,16 @@
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, ipcMain } = require('electron')
 require('electron-reload')(__dirname);
+const path = require('path');
+const proto = require("./proto.js")
 
 function createWindow () {
     const win = new BrowserWindow({
         width: 450,
         height: 730,
         webPreferences: {
-            nodeIntegration: true
+            preload: path.join(__dirname, 'preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false
         }
     })
     win.removeMenu()
@@ -23,6 +27,10 @@ app.whenReady().then(() => {
         }
     })
 })
+
+ipcMain.handle('start', async (event, params) => {
+    console.log(JSON.stringify(params, null, 2))
+});
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {

@@ -6,7 +6,7 @@
     "build:css": "npx @tailwindcss/cli -i ./src/input.css -o ./src/output.css",
     "watch:css": "npx @tailwindcss/cli -i ./src/input.css -o ./src/output.css --watch",
     "start": "electron .",
-    "dev": "concurrently --kill-others \"npm run watch:css\" \"npm run start\""
+    "dev": "npm run start"
   },
   "keywords": [],
   "author": "",
@@ -18,5 +18,8 @@
     "electron": "^42.0.1",
     "electron-reload": "^2.0.0-alpha.1",
     "tailwindcss": "^4.3.0"
+  },
+  "dependencies": {
+    "mineflayer": "^4.37.1"
   }
 }

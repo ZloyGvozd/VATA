@@ -1,0 +1,22 @@
+/* 1. Ширина скроллбара */
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+/* 2. Дорожка */
+::-webkit-scrollbar-track {
+    background: #353535;
+    border-radius: 10px;
+}
+
+/* 3. Бегунок */
+::-webkit-scrollbar-thumb {
+    background: #353535;
+    border-radius: 10px;
+    border: 2px solid oklch(63.7% 0.237 25.331); /* Создает эффект отступа */
+}
+
+/* 4. Эффект при наведении */
+::-webkit-scrollbar-thumb:hover {
+    background: oklch(63.7% 0.237 25.331);
+}
