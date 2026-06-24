@@ -1,7 +1,8 @@
 const { app, BrowserWindow, ipcMain } = require('electron')
 require('electron-reload')(__dirname);
 const path = require('path');
-const proto = require("./proto.js")
+const Proto = require("./proto.js")
+const {Worker} = require("worker_threads");
 
 function createWindow () {
     const win = new BrowserWindow({
@@ -29,7 +30,7 @@ app.whenReady().then(() => {
 })
 
 ipcMain.handle('start', async (event, params) => {
-    console.log(JSON.stringify(params, null, 2))
+    const worker = new Worker('./proto.js');
 });
 
 app.on('window-all-closed', () => {

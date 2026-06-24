@@ -1,15 +1,17 @@
 const net = require('net');
 const crypto = require('crypto');
+const { parentPort } = require('worker_threads');
 
-class MinecraftBuffer {
-    /**
-     * Кодирует число в VarInt (32-бит)
-     * @param {number} value
-     * @returns {Uint8Array}
-     */
-    static encodeVarInt(value) {
+class Proto{
+    client = undefined
+    currentStep = 0
+    ip = undefined
+    port = undefined
+
+    constructor() {}
+
+    writeVarInt(value) {
         const bytes = [];
-        // Приводим к 32-битному знаковому целому (аналог Java int)
         let v = value | 0;
 
         while (true) {
@@ -18,177 +20,175 @@ class MinecraftBuffer {
                 break;
             }
             bytes.push((v & 0x7F) | 0x80);
-            v >>>= 7; // Беззнаковый сдвиг
+            v >>>= 7;
         }
         return new Uint8Array(bytes);
     }
-
-    /**
-     * Декодирует VarInt из буфера
-     * @param {Uint8Array} buffer
-     * @param {number} offset
-     * @returns {{value: number, length: number}}
-     */
-    static decodeVarInt(buffer, offset = 0) {
+    readVarInt(buf) {
         let value = 0;
-        let length = 0;
-        let currentByte;
+        let shift = 0;
+        let bytesRead = 0;
 
-        while (true) {
-            currentByte = buffer[offset + length];
-            value |= (currentByte & 0x7F) << (length * 7);
-
-            length++;
-            if (length > 10) throw new Error("VarInt is too big");
-            if ((currentByte & 0x80) !== 0x80) break;
-        }
-
-        return { value, length };
-    }
-
-    /**
-     * Кодирует BigInt в VarLong (64-бит)
-     * @param {bigint} value
-     * @returns {Uint8Array}
-     */
-    static encodeVarLong(value) {
-        const bytes = [];
-        let v = BigInt(value);
-
-        while (true) {
-            if ((v & ~0x7Fn) === 0n) {
-                bytes.push(Number(v));
-                break;
+        while (bytesRead < buf.length) {
+            const byte = buf[bytesRead++];
+            value |= (byte & 0x7F) << shift;
+            if ((byte & 0x80) === 0) {
+                return { value, bytesRead };
             }
-            bytes.push(Number((v & 0x7Fn) | 0x80n));
-            v >>= 7n;
+            shift += 7;
+            if (shift >= 35) throw new Error('VarInt too big');
         }
-        return new Uint8Array(bytes);
+        return null;
     }
 
-    /**
-     * Декодирует VarLong из буфера
-     * @param {Uint8Array} buffer
-     * @param {number} offset
-     * @returns {{value: bigint, length: number}}
-     */
-    static decodeVarLong(buffer, offset = 0) {
-        let value = 0n;
-        let length = 0;
-        let currentByte;
+    printHex(bytes, bytesPerLine = 16) {
+        for (let i = 0; i < bytes.length; i += bytesPerLine) {
+            const chunk = bytes.slice(i, i + bytesPerLine);
 
-        while (true) {
-            currentByte = buffer[offset + length];
-            value |= BigInt(currentByte & 0x7F) << BigInt(length * 7);
+            // 1. Смещение (Адрес)
+            const offset = i.toString(16).padStart(8, '0');
 
-            length++;
-            if (length > 10) throw new Error("VarLong is too big");
-            if ((currentByte & 0x80) !== 0x80) break;
+            // 2. Гексадецимальная часть
+            const hex = Array.from(chunk)
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join(' ')
+                .padEnd(bytesPerLine * 3 - 1, ' ');
+
+            // 3. ASCII часть (читаемый текст)
+            const ascii = Array.from(chunk)
+                .map(b => (b >= 32 && b <= 126 ? String.fromCharCode(b) : '.'))
+                .join('');
+
+            console.log(`${offset.toUpperCase()} | ${hex.toUpperCase()} | ${ascii}`);
+        }
+    }
+
+    bigEndian(value){
+        const byte1 = Math.floor(value / 256); // Старший байт
+        const byte2 = value % 256;             // Младший байт
+        return [byte1,byte2]
+    }
+
+    getOfflineUUID(username) {
+        const data = "OfflinePlayer:" + username;
+        const hash = crypto.createHash('md5').update(data, 'utf8').digest();
+        hash[6] = (hash[6] & 0x0f) | 0x30
+        hash[8] = (hash[8] & 0x3f) | 0x80;
+        return hash
+    }
+
+    buildHandshake(ip,port){
+        const address_name = Buffer.from(ip, 'ascii')
+        let buildBuffer = [0x00,...this.writeVarInt(775),address_name.length,...address_name,...this.bigEndian(port),0x02]
+        buildBuffer = [buildBuffer.length].concat(buildBuffer)
+        //printHex(buildBuffer)
+        const bytes = new Uint8Array(buildBuffer);
+        return bytes
+    }
+
+    buildLogin(name){
+        const byte_name = Buffer.from(name, 'ascii')
+        let buildBuffer = [0x00,name.length,...byte_name,...this.getOfflineUUID(name)]
+        buildBuffer = [buildBuffer.length].concat(buildBuffer)
+        const bytes = new Uint8Array(buildBuffer);
+        return bytes
+    }
+    buildClientInformation(){
+        return new Uint8Array([0x10, 0x00, 0x00, 0x05, 0x65, 0x6E, 0x5F, 0x75, 0x73, 0x02, 0x00, 0x01, 0x7F, 0x01, 0x00, 0x01, 0x00])
+    }
+
+    login(ip,port = 25565,nick){
+        this.ip = ip
+        this.port = port
+        this.client = net.createConnection({host: this.ip, port: this.port }, () => {
+            console.log('Подключено к серверу');
+            this.currentStep = 1
+            console.log(this.currentStep)
+            this.client.write(this.buildHandshake(this.ip,this.port));
+            this.currentStep = 2
+            console.log(this.currentStep)
+            this.client.write(this.buildLogin(nick))
+        });
+
+        let buffer = Buffer.alloc(0);
+        this.client.on('data', (data) => {
+            buffer = Buffer.concat([buffer, data])
+
+            while (true) {
+                const length = this.readVarInt(buffer)
+                if (!length) break
+
+                const packetLength = length.value;
+                let headerSize = length.bytesRead;
+                const totalExpectedSize = headerSize + packetLength;
+
+                if (buffer.length < totalExpectedSize) {
+                    break
+                }
+
+                headerSize += this.readVarInt(buffer.subarray(headerSize, totalExpectedSize)).bytesRead
+
+                const packetBody = buffer.subarray(headerSize, totalExpectedSize);
+                buffer = buffer.subarray(totalExpectedSize);
+
+                this.on_packet(packetBody)
+            }
+        })
+    }
+
+    isSpy = false
+    players = []
+
+    on_packet(data){
+        //printHex(data)
+        //Login Success
+        if(data[0] === 0x02 && this.currentStep === 2){
+            console.log("Login Success")
+            const bytes = new Uint8Array([0x02,0x00,0x03]);
+            this.client.write(bytes)
+            this.client.write(this.buildClientInformation())
+
+            this.currentStep = 3
+            console.log(this.currentStep)
         }
 
-        return { value, length };
-    }
-}
+        //Clientbound Plugin Message
+        if(data[0] === 0x01 && this.currentStep === 3) {
+            console.log("Clientbound Plugin Message")
+            const bytes = new Uint8Array([0x03,0x00,0x07,0x00]);
+            this.client.write(bytes)
+        }
 
-function printHex(bytes){
-    const hexString = Array.from(bytes)
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join(' '); // Соединяем через пробел для читаемости
+        //Finish Configuration
+        if(data[0] === 0x03 && this.currentStep === 3){
+            console.log("Finish Configuration")
+            const bytes = new Uint8Array([0x02, 0x00, 0x03]);
+            this.client.write(bytes)
 
-    console.log(hexString.toUpperCase());
-}
+            this.currentStep = 4
+            console.log(this.currentStep)
+        }
 
-function timeout(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
+        //Keep alive
+        if(data[0] === 0x2C && this.currentStep === 4){
+            console.log("Keep alive")
+            let copy_data = data
+            copy_data[0] = 0x1C
+            this.client.write(new Uint8Array([0x0A,0x00,...copy_data]))
+        }
 
-function bigEndian(value){
-    const byte1 = Math.floor(value / 256); // Старший байт
-    const byte2 = value % 256;             // Младший байт
-    return [byte1,byte2]
-}
-
-function getOfflineUUID(username) {
-    // 1. Формируем строку как в Java: "OfflinePlayer:" + никнейм
-    const data = "OfflinePlayer:" + username;
-
-    // 2. Считаем MD5 хэш (в бинарном виде)
-    const hash = crypto.createHash('md5').update(data, 'utf8').digest();
-
-    // 3. Устанавливаем версию (3) и вариант (RFC 4122)
-    // Эти манипуляции с байтами обязательны для соответствия стандарту UUID v3
-    hash[6] = (hash[6] & 0x0f) | 0x30; // Version 3
-    hash[8] = (hash[8] & 0x3f) | 0x80; // Variant is RFC 4122
-
-    return hash
-}
-
-function buildHandshake(ip,port){
-    const address_name = Buffer.from(ip, 'ascii')
-    let buildBuffer = [0x00,...MinecraftBuffer.encodeVarInt(775),address_name.length,...address_name,...bigEndian(port),0x02]
-    buildBuffer = [buildBuffer.length].concat(buildBuffer)
-    //printHex(buildBuffer)
-    const bytes = new Uint8Array(buildBuffer);
-    return bytes
-}
-
-function buildLogin(name){
-    const byte_name = Buffer.from(name, 'ascii')
-    let buildBuffer = [0x00,name.length,...byte_name,...getOfflineUUID(name)]
-    buildBuffer = [buildBuffer.length].concat(buildBuffer)
-    const bytes = new Uint8Array(buildBuffer);
-    return bytes
-}
-function buildClientInformation(){
-    return new Uint8Array([0x10, 0x00, 0x00, 0x05, 0x65, 0x6E, 0x5F, 0x75, 0x73, 0x02, 0x00, 0x01, 0x7F, 0x01, 0x00, 0x01, 0x00])
-}
-
-let currentStep = 1
-
-const client = net.createConnection({host: "127.0.0.1",port: 25565}, () => {
-    console.log(currentStep)
-    client.write(buildHandshake("127.0.0.1",25565));
-    currentStep = 2
-    console.log(currentStep)
-    client.write(buildLogin("1488_228"))
-});
-
-client.on('data', (data) => {
-    //printHex(data)
-    if(data[2] === 0x02 && currentStep === 2){
-        const bytes = new Uint8Array([0x02,0x00,0x03]);
-        client.write(bytes)
-        currentStep = 3
-        console.log(currentStep)
-        client.write(buildClientInformation())
-    }
-    if(data[2] === 0x01 && currentStep === 3) {
-        console.log("arsen")
-        const bytes = new Uint8Array([0x03,0x00,0x07,0x00]);
-        client.write(bytes)
-        currentStep = 4
-    }
-    if(currentStep === 4){
-        let copy_data = data
-        while(copy_data.length > 0){
-            const len = MinecraftBuffer.decodeVarInt(copy_data)
-            //console.log(len.value)
-            const info = copy_data.slice(0,len.value)
-            copy_data = copy_data.slice(len.value)
-            console.log(1)
-            printHex(info)
-            if(info[0] === 0x03){
-                const bytes = new Uint8Array([0x02, 0x00, 0x03]);
-                client.write(bytes)
-                currentStep = 5
-                break
+        if(data[0] === 0x46 && data[1] === 0xFF && this.currentStep === 4 && this.isSpy){
+            let name
+            let name_str
+            if(data[19]){
+                name = data.subarray(20,20+data[19])
+                name_str = name.toString()
+                if(!this.players.includes(name_str)){
+                    this.players.push(name_str)
+                }
+                parentPort.postMessage({resp:"players",data:this.players})
             }
         }
     }
-    if(data[2] === 0x2C) {
-        console.log("pisos")
-        let copy_data = data
-        copy_data[2] = 0x1C
-        client.write(copy_data)
-    }
-});
+}
+module.exports = Proto
